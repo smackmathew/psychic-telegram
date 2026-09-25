@@ -123,7 +123,7 @@ class TransactionUpdate(BaseModel):
     category_id: str | None = None
     notes: str | None = None
     name: str | None = None
-    amount: float | None = None
+    amount: float | None = Field(default=None, gt=0)
     date: _Date | None = None
 
 

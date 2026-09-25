@@ -86,8 +86,12 @@ def update_transaction(
     txn = _base_query(db, household_id).filter(models.Transaction.id == transaction_id).first()
     if not txn:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Transaction not found")
+    account = txn.account
+    old_delta = transaction_delta(account.type, float(txn.amount), txn.direction)
     for field, value in payload.model_dump(exclude_unset=True).items():
         setattr(txn, field, value)
+    new_delta = transaction_delta(account.type, float(txn.amount), txn.direction)
+    account.current_balance = float(account.current_balance) - old_delta + new_delta
     db.commit()
     db.refresh(txn)
     return txn

@@ -114,3 +114,38 @@ def test_create_custom_category(api):
     response = api.post("/categories", json={"name": "Pets", "type": "expense", "icon": "paw"})
     assert response.status_code == 201
     assert response.json()["is_default"] is False
+
+
+@pytest.mark.parametrize(
+    "account_type, direction, expected_after_edit",
+    [
+        ("checking", "debit", 850),
+        ("checking", "credit", 1_150),
+        ("credit_card", "debit", 1_150),
+        ("credit_card", "credit", 850),
+    ],
+)
+def test_editing_transaction_amount_updates_account_balance(api, account_type, direction, expected_after_edit):
+    account = api.create_account(type=account_type, current_balance=1_000)
+    txn = api.create_transaction(account["id"], amount=100, direction=direction, date=TODAY)
+
+    response = api.patch(f"/transactions/{txn['id']}", json={"amount": 150})
+    assert response.status_code == 200
+    assert _balance(api, account["id"]) == expected_after_edit
+
+    # Deleting after the edit undoes the new amount, landing back on the original balance.
+    api.delete(f"/transactions/{txn['id']}")
+    assert _balance(api, account["id"]) == 1_000
+
+
+def test_editing_other_fields_leaves_balance_alone(api):
+    account = api.create_account(current_balance=1_000)
+    txn = api.create_transaction(account["id"], amount=100, date=TODAY)
+    api.patch(f"/transactions/{txn['id']}", json={"notes": "hi", "category_id": api.category_id("Groceries")})
+    assert _balance(api, account["id"]) == 900
+
+
+def test_edited_amount_must_be_positive(api):
+    account = api.create_account()
+    txn = api.create_transaction(account["id"], amount=100, date=TODAY)
+    assert api.patch(f"/transactions/{txn['id']}", json={"amount": 0}).status_code == 422
