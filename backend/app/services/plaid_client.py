@@ -4,46 +4,56 @@ and syncing transactions/balances/investment holdings into our own models.
 Requires PLAID_CLIENT_ID / PLAID_SECRET to be set (see .env.example); until then,
 `settings.plaid_enabled` is False and the /plaid router returns 503 so the rest of
 the app still works with manually-entered accounts.
+
+The `plaid` package itself (~100ms and a non-trivial chunk of memory to import) is
+loaded lazily, inside each function, instead of at module level. Importing this
+module - which app.main does indirectly, via the /plaid router and the scheduler,
+on every process start - stays cheap either way; `plaid` is only actually pulled
+into the process the first time a household that has configured Plaid keys
+triggers a real API call (link token, token exchange, or a sync).
 """
+
+from __future__ import annotations
 
 import logging
 from functools import lru_cache
+from typing import TYPE_CHECKING
 
-import plaid
-from plaid.api import plaid_api
-from plaid.model.accounts_get_request import AccountsGetRequest
-from plaid.model.country_code import CountryCode
-from plaid.model.investments_holdings_get_request import InvestmentsHoldingsGetRequest
-from plaid.model.item_public_token_exchange_request import ItemPublicTokenExchangeRequest
-from plaid.model.link_token_create_request import LinkTokenCreateRequest
-from plaid.model.link_token_create_request_user import LinkTokenCreateRequestUser
-from plaid.model.products import Products
-from plaid.model.transactions_sync_request import TransactionsSyncRequest
 from sqlalchemy.orm import Session
 
 from app import models
 from app.config import get_settings
 
+if TYPE_CHECKING:
+    from plaid.api.plaid_api import PlaidApi
+
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
-_ENV_HOSTS = {
-    "sandbox": plaid.Environment.Sandbox,
-    "production": plaid.Environment.Production,
-}
-
 
 @lru_cache
-def get_plaid_client() -> plaid_api.PlaidApi:
+def get_plaid_client() -> "PlaidApi":
+    import plaid
+    from plaid.api.plaid_api import PlaidApi
+
+    env_hosts = {
+        "sandbox": plaid.Environment.Sandbox,
+        "production": plaid.Environment.Production,
+    }
     configuration = plaid.Configuration(
-        host=_ENV_HOSTS.get(settings.plaid_env, plaid.Environment.Sandbox),
+        host=env_hosts.get(settings.plaid_env, plaid.Environment.Sandbox),
         api_key={"clientId": settings.plaid_client_id, "secret": settings.plaid_secret},
     )
     api_client = plaid.ApiClient(configuration)
-    return plaid_api.PlaidApi(api_client)
+    return PlaidApi(api_client)
 
 
 def create_link_token(user_id: str) -> str:
+    from plaid.model.country_code import CountryCode
+    from plaid.model.link_token_create_request import LinkTokenCreateRequest
+    from plaid.model.link_token_create_request_user import LinkTokenCreateRequestUser
+    from plaid.model.products import Products
+
     client = get_plaid_client()
     request = LinkTokenCreateRequest(
         products=[Products(p) for p in settings.plaid_products_list],
@@ -57,6 +67,8 @@ def create_link_token(user_id: str) -> str:
 
 
 def exchange_public_token(public_token: str) -> dict:
+    from plaid.model.item_public_token_exchange_request import ItemPublicTokenExchangeRequest
+
     client = get_plaid_client()
     response = client.item_public_token_exchange(ItemPublicTokenExchangeRequest(public_token=public_token))
     return {"access_token": response.access_token, "item_id": response.item_id}
@@ -76,6 +88,8 @@ def _map_account_type(plaid_type: str, plaid_subtype: str | None) -> models.Acco
 
 def import_accounts_for_item(db: Session, plaid_item: models.PlaidItem) -> list[models.Account]:
     """Fetch accounts for a Plaid Item and create/update our Account rows + balances."""
+    from plaid.model.accounts_get_request import AccountsGetRequest
+
     client = get_plaid_client()
     response = client.accounts_get(AccountsGetRequest(access_token=plaid_item.access_token))
 
@@ -108,6 +122,8 @@ def import_accounts_for_item(db: Session, plaid_item: models.PlaidItem) -> list[
 
 
 def sync_transactions_for_item(db: Session, plaid_item: models.PlaidItem) -> None:
+    from plaid.model.transactions_sync_request import TransactionsSyncRequest
+
     client = get_plaid_client()
     accounts_by_plaid_id = {
         a.plaid_account_id: a for a in db.query(models.Account).filter(models.Account.plaid_item_id == plaid_item.id).all()
@@ -159,6 +175,9 @@ def sync_transactions_for_item(db: Session, plaid_item: models.PlaidItem) -> Non
 
 
 def sync_investment_holdings_for_item(db: Session, plaid_item: models.PlaidItem) -> None:
+    import plaid
+    from plaid.model.investments_holdings_get_request import InvestmentsHoldingsGetRequest
+
     investment_accounts = (
         db.query(models.Account)
         .filter(models.Account.plaid_item_id == plaid_item.id, models.Account.type == models.AccountType.investment)
@@ -186,6 +205,8 @@ def sync_investment_holdings_for_item(db: Session, plaid_item: models.PlaidItem)
 
 
 def sync_household_plaid_items(db: Session, household_id: str) -> None:
+    import plaid
+
     items = db.query(models.PlaidItem).filter(models.PlaidItem.household_id == household_id).all()
     for item in items:
         try:
