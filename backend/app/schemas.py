@@ -1,7 +1,7 @@
 from datetime import date, datetime
 from datetime import date as _Date  # aliased to avoid clashing with fields literally named `date`
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
 from app.models import (
     AccountType,
@@ -125,6 +125,15 @@ class TransactionUpdate(BaseModel):
     name: str | None = None
     amount: float | None = Field(default=None, gt=0)
     date: _Date | None = None
+
+    @field_validator("name", "amount", "date")
+    @classmethod
+    def _not_null(cls, value):
+        # These may be omitted, but the columns are non-nullable, so an explicit null is invalid.
+        # (Validators don't run on defaults, so this only fires when the client sends null.)
+        if value is None:
+            raise ValueError("may be omitted but not null")
+        return value
 
 
 class TransactionOut(TransactionBase):
