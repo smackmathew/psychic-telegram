@@ -1,58 +1,21 @@
 import { apiClient } from "./client";
+
+// Migrated to Firebase. The rest below still call the old Python API until their stage is moved.
+export { AuthApi, HouseholdApi } from "../firebase/household";
+export { AccountsApi, CategoriesApi, TransactionsApi } from "../firebase/ledger";
 import type {
   Account,
   BorrowingCapacityOut,
   BorrowingCapacityRequest,
   BudgetProgress,
-  Category,
   CreditProfile,
   CreditRecommendationsOut,
   CreditScoreHistoryPoint,
   DashboardSummary,
   Goal,
-  Household,
   Notification,
   RecurringBill,
-  Transaction,
-  User,
 } from "../types";
-
-export const AuthApi = {
-  login: (email: string, password: string) =>
-    apiClient.post<{ access_token: string }>("/auth/login", { email, password }).then((r) => r.data),
-  signup: (payload: { full_name: string; email: string; password: string; household_name?: string; invite_code?: string }) =>
-    apiClient.post<{ access_token: string }>("/auth/signup", payload).then((r) => r.data),
-  me: () => apiClient.get<User>("/auth/me").then((r) => r.data),
-};
-
-export const HouseholdApi = {
-  get: () => apiClient.get<Household>("/household").then((r) => r.data),
-  update: (payload: Partial<Pick<Household, "name" | "annual_gross_income">>) =>
-    apiClient.patch<Household>("/household", payload).then((r) => r.data),
-  members: () => apiClient.get<User[]>("/household/members").then((r) => r.data),
-};
-
-export const AccountsApi = {
-  list: () => apiClient.get<Account[]>("/accounts").then((r) => r.data),
-  create: (payload: Partial<Account>) => apiClient.post<Account>("/accounts", payload).then((r) => r.data),
-  update: (id: string, payload: Partial<Account>) => apiClient.patch<Account>(`/accounts/${id}`, payload).then((r) => r.data),
-  remove: (id: string) => apiClient.delete(`/accounts/${id}`),
-};
-
-export const CategoriesApi = {
-  list: () => apiClient.get<Category[]>("/categories").then((r) => r.data),
-  create: (payload: { name: string; type: string; icon?: string }) =>
-    apiClient.post<Category>("/categories", payload).then((r) => r.data),
-};
-
-export const TransactionsApi = {
-  list: (params: Record<string, string | number | undefined> = {}) =>
-    apiClient.get<Transaction[]>("/transactions", { params }).then((r) => r.data),
-  create: (payload: Partial<Transaction>) => apiClient.post<Transaction>("/transactions", payload).then((r) => r.data),
-  update: (id: string, payload: Partial<Transaction>) =>
-    apiClient.patch<Transaction>(`/transactions/${id}`, payload).then((r) => r.data),
-  remove: (id: string) => apiClient.delete(`/transactions/${id}`),
-};
 
 export const BudgetsApi = {
   list: (month?: string) => apiClient.get<BudgetProgress[]>("/budgets", { params: { month } }).then((r) => r.data),
