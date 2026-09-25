@@ -1,6 +1,8 @@
+import { Suspense } from "react";
 import { NavLink, Outlet } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import NotificationBell from "./NotificationBell";
+import PageLoader from "./PageLoader";
 
 const NAV_ITEMS = [
   { to: "/", label: "Dashboard", end: true },
@@ -63,7 +65,9 @@ export default function Layout() {
         </nav>
       </header>
       <main className="mx-auto max-w-6xl px-4 py-6">
-        <Outlet />
+        <Suspense fallback={<PageLoader />}>
+          <Outlet />
+        </Suspense>
       </main>
     </div>
   );

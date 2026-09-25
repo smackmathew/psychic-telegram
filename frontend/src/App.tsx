@@ -1,14 +1,17 @@
+import { lazy, Suspense } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import Layout from "./components/Layout";
+import PageLoader from "./components/PageLoader";
 import { useAuth } from "./context/AuthContext";
-import Accounts from "./pages/Accounts";
-import Budgets from "./pages/Budgets";
-import Credit from "./pages/Credit";
-import Dashboard from "./pages/Dashboard";
-import Goals from "./pages/Goals";
-import Login from "./pages/Login";
-import NotificationsPage from "./pages/Notifications";
-import Transactions from "./pages/Transactions";
+
+const Accounts = lazy(() => import("./pages/Accounts"));
+const Budgets = lazy(() => import("./pages/Budgets"));
+const Credit = lazy(() => import("./pages/Credit"));
+const Dashboard = lazy(() => import("./pages/Dashboard"));
+const Goals = lazy(() => import("./pages/Goals"));
+const Login = lazy(() => import("./pages/Login"));
+const NotificationsPage = lazy(() => import("./pages/Notifications"));
+const Transactions = lazy(() => import("./pages/Transactions"));
 
 function RequireAuth({ children }: { children: React.ReactElement }) {
   const { user, loading } = useAuth();
@@ -24,7 +27,14 @@ function RequireAuth({ children }: { children: React.ReactElement }) {
 export default function App() {
   return (
     <Routes>
-      <Route path="/login" element={<Login />} />
+      <Route
+        path="/login"
+        element={
+          <Suspense fallback={<PageLoader />}>
+            <Login />
+          </Suspense>
+        }
+      />
       <Route
         path="/"
         element={
