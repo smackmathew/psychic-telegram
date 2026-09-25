@@ -99,6 +99,25 @@ alembic upgrade head
 Useful commands: `alembic current` (what's applied), `alembic history` (full list),
 `alembic downgrade -1` (undo the last migration).
 
+## Running the tests
+
+The backend has a pytest suite under `backend/tests/` covering the service logic (borrowing
+capacity, credit recommendations, notification rules), every API route, household data
+isolation, and a check that `app/models.py` matches the Alembic migrations. It runs against a
+real Postgres database built from the migrations; each test is rolled back afterwards.
+
+With the Docker Compose database running (`docker compose up -d db`):
+```bash
+cd backend
+pip install -r requirements-dev.txt
+pytest
+```
+
+By default the suite uses a `household_dashboard_test` database on the Compose Postgres
+(created automatically, and **wiped on every run**). Point it elsewhere with
+`TEST_DATABASE_URL=postgresql://user:pass@host:5432/some_test_db`. CI runs the same suite on
+every push that touches `backend/` (`.github/workflows/backend-tests.yml`).
+
 ## Notable simplifications (MVP)
 
 - Transfers between your own accounts (e.g. paying a credit card from checking) are recorded as two
