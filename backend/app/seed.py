@@ -7,11 +7,14 @@ Usage:
         --user2-name "Sam Smith" --user2-email sam@example.com --user2-password "..."
 
 Safe to re-run: it skips creating a household/user if one with that email already exists.
+
+Run `alembic upgrade head` first (the Docker image does this automatically) - this
+script assumes the schema already exists and no longer creates tables itself.
 """
 
 import argparse
 
-from app.database import Base, SessionLocal, engine
+from app.database import SessionLocal
 from app.models import Category, CategoryType, Household, User
 from app.routers.auth import DEFAULT_CATEGORIES
 from app.security import hash_password
@@ -28,7 +31,6 @@ def main() -> None:
     parser.add_argument("--user2-password", required=True)
     args = parser.parse_args()
 
-    Base.metadata.create_all(bind=engine)
     db = SessionLocal()
     try:
         household = db.query(Household).filter(Household.name == args.household_name).first()

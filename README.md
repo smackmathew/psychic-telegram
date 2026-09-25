@@ -59,6 +59,7 @@ cd backend
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 cp .env.example .env   # edit DATABASE_URL to point at your own Postgres
+alembic upgrade head    # create/update the schema
 uvicorn app.main:app --reload
 python -m app.seed --household-name "..." --user1-name "..." --user1-email "..." --user1-password "..." --user2-name "..." --user2-email "..." --user2-password "..."
 ```
@@ -81,10 +82,25 @@ npm run dev
 
 Without Plaid keys, the app still works fully with manually-entered accounts and transactions.
 
+## Database migrations (Alembic)
+
+Schema is managed by Alembic (`backend/alembic/`). The Docker image runs `alembic upgrade head`
+automatically on every container start (see `backend/entrypoint.sh`); running the backend
+manually, do it yourself first (see Option B above).
+
+After changing a model in `app/models.py`, generate and apply a migration:
+```bash
+cd backend
+alembic revision --autogenerate -m "describe the change"
+# review the generated file under alembic/versions/ before applying
+alembic upgrade head
+```
+
+Useful commands: `alembic current` (what's applied), `alembic history` (full list),
+`alembic downgrade -1` (undo the last migration).
+
 ## Notable simplifications (MVP)
 
-- No database migrations yet - tables are created automatically on startup (`Base.metadata.create_all`).
-  Add Alembic if you need to evolve the schema without dropping data later.
 - Transfers between your own accounts (e.g. paying a credit card from checking) are recorded as two
   independent transactions and aren't automatically reconciled, so cash-flow totals can double-count
   transfers. Fine for balances/net worth (which are accurate), just a nuance for the income/expense totals.

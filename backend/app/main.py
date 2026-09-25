@@ -5,7 +5,6 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
-from app.database import Base, engine
 from app.routers import (
     accounts,
     auth,
@@ -28,7 +27,9 @@ settings = get_settings()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    Base.metadata.create_all(bind=engine)
+    # Schema is managed by Alembic migrations (see backend/alembic/) - run
+    # `alembic upgrade head` before starting the app (the Docker image does this
+    # automatically; see backend/Dockerfile).
     start_scheduler()
     yield
     stop_scheduler()
