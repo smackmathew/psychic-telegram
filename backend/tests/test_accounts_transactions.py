@@ -105,6 +105,26 @@ def test_update_transaction_amount_must_be_positive(api):
         assert api.patch(f"/transactions/{txn['id']}", json={"amount": amount}).status_code == 422
     assert _balance(api, account["id"]) == 900
 
+
+@pytest.mark.parametrize("field", ["amount", "name", "date"])
+def test_update_transaction_rejects_null_for_required_fields(api, field):
+    account = api.create_account(current_balance=1_000)
+    txn = api.create_transaction(account["id"], amount=100, direction="debit", date=TODAY, name="Coffee")
+
+    assert api.patch(f"/transactions/{txn['id']}", json={field: None}).status_code == 422
+    assert _balance(api, account["id"]) == 900
+    unchanged = api.get("/transactions").json()[0]
+    assert (unchanged["amount"], unchanged["name"], unchanged["date"]) == (100, "Coffee", TODAY)
+
+
+def test_update_transaction_allows_clearing_optional_fields(api):
+    account = api.create_account()
+    txn = api.create_transaction(account["id"], amount=20, date=TODAY, category_id=api.category_id("Groceries"))
+
+    response = api.patch(f"/transactions/{txn['id']}", json={"category_id": None, "notes": None})
+    assert response.status_code == 200
+    assert response.json()["category_id"] is None
+
 def test_list_transactions_filters(api):
     checking = api.create_account(name="Checking")
     card = api.create_account(name="Card", type="credit_card")
