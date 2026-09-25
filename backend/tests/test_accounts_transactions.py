@@ -77,6 +77,34 @@ def test_update_transaction(api):
     assert response.json()["name"] == "Coffee"
 
 
+@pytest.mark.parametrize(
+    "account_type, expected_balance",
+    [
+        ("checking", 850),  # a 100 debit left 900; bumping it to 150 leaves 850
+        ("credit_card", 1_150),  # a 100 charge left 1,100 owed; bumping it to 150 leaves 1,150
+    ],
+)
+def test_updating_transaction_amount_adjusts_account_balance(api, account_type, expected_balance):
+    account = api.create_account(type=account_type, current_balance=1_000)
+    txn = api.create_transaction(account["id"], amount=100, direction="debit", date=TODAY)
+
+    response = api.patch(f"/transactions/{txn['id']}", json={"amount": 150})
+    assert response.status_code == 200
+    assert response.json()["amount"] == 150
+    assert _balance(api, account["id"]) == expected_balance
+
+    # Deleting the edited transaction restores the original balance.
+    api.delete(f"/transactions/{txn['id']}")
+    assert _balance(api, account["id"]) == 1_000
+
+
+def test_update_transaction_amount_must_be_positive(api):
+    account = api.create_account(current_balance=1_000)
+    txn = api.create_transaction(account["id"], amount=100, direction="debit", date=TODAY)
+    for amount in (0, -50):
+        assert api.patch(f"/transactions/{txn['id']}", json={"amount": amount}).status_code == 422
+    assert _balance(api, account["id"]) == 900
+
 def test_list_transactions_filters(api):
     checking = api.create_account(name="Checking")
     card = api.create_account(name="Card", type="credit_card")
