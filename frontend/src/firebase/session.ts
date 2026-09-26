@@ -8,8 +8,7 @@ import {
 } from "firebase/firestore";
 import { db } from "./app";
 
-// The signed-in user's household. Every data call is scoped to it, the way the old API
-// scoped every request to the household of the user in the auth token.
+// The signed-in user's household, set at sign-in. Every data call is scoped to it.
 let currentHouseholdId: string | null = null;
 
 export function setCurrentHousehold(householdId: string | null): void {

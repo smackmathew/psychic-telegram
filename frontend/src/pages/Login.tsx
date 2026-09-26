@@ -101,7 +101,7 @@ export default function Login() {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-700">
-                    Invite code <span className="text-slate-400">(from your partner's household settings)</span>
+                    Invite code <span className="text-slate-400">(shown on your partner's dashboard)</span>
                   </label>
                   <input
                     className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"

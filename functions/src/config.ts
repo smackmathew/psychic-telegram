@@ -1,4 +1,4 @@
-// Thresholds for the notification checks (the same defaults the Python backend used).
+// Thresholds for the notification checks.
 export const LARGE_TRANSACTION_THRESHOLD_CENTS = 500_00;
 export const BUDGET_WARNING_PCT = 0.9;
 export const UPCOMING_BILL_LEAD_DAYS = 3;

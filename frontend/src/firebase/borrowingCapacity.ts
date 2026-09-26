@@ -60,7 +60,7 @@ export function computeBorrowingCapacity(inputs: BorrowingCapacityInputs): Borro
   if (bestCreditScore == null) {
     mortgageReadiness = "Add a credit score for household members to get a real readiness read.";
   } else if (monthlyIncome <= 0) {
-    mortgageReadiness = "Add your household's annual gross income (Household settings) to estimate mortgage readiness.";
+    mortgageReadiness = "Add your household's annual gross income (the Household income box on this page) to estimate mortgage readiness.";
   } else if (bestCreditScore >= 740 && currentDtiPct <= 36) {
     mortgageReadiness = "Strong: score and DTI are in range for the best conventional mortgage rates.";
   } else if (bestCreditScore >= 670 && currentDtiPct <= 43) {
