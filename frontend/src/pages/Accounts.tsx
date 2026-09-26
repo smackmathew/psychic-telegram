@@ -30,7 +30,7 @@ function PlaidLinkButton({ onLinked }: { onLinked: () => void }) {
   if (!status?.enabled) {
     return (
       <p className="text-xs text-slate-400">
-        Bank sync isn't configured yet - add PLAID_CLIENT_ID / PLAID_SECRET to the backend environment to enable it.
+        Bank sync isn't configured yet - set PLAID_CLIENT_ID and PLAID_SECRET for the Cloud Functions to enable it (see the README).
       </p>
     );
   }

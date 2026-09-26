@@ -6,6 +6,7 @@ import {
   persistentLocalCache,
   persistentMultipleTabManager,
 } from "firebase/firestore";
+import { connectFunctionsEmulator, getFunctions } from "firebase/functions";
 
 const env = import.meta.env;
 
@@ -27,7 +28,10 @@ export const db = initializeFirestore(
   hasIndexedDb ? { localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }) } : {},
 );
 
+export const functions = getFunctions(app);
+
 if (env.VITE_USE_EMULATORS === "true") {
   connectAuthEmulator(auth, "http://127.0.0.1:9099", { disableWarnings: true });
   connectFirestoreEmulator(db, "127.0.0.1", 8080);
+  connectFunctionsEmulator(functions, "127.0.0.1", 5001);
 }

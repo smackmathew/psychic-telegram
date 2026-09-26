@@ -23,8 +23,8 @@ export default defineConfig({
         // chunk instead of duplicating/inlining them with app code.
         manualChunks: {
           "vendor-react": ["react", "react-dom", "react-router-dom"],
-          "vendor-query": ["@tanstack/react-query", "axios"],
-          "vendor-firebase": ["firebase/app", "firebase/auth", "firebase/firestore"],
+          "vendor-query": ["@tanstack/react-query"],
+          "vendor-firebase": ["firebase/app", "firebase/auth", "firebase/firestore", "firebase/functions"],
         },
       },
     },
