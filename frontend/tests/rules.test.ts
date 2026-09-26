@@ -185,3 +185,34 @@ describe("budgets, goals, bills and notifications", () => {
     await assertFails(updateDoc(ref, { title: "Edited" }));
   });
 });
+
+describe("credit profiles and history", () => {
+  const profile = { bureau: "other", score: 700, utilization_pct: 12.5, on_time_payment_pct: null };
+
+  it("can be written for household members only", async () => {
+    const db = as("alex");
+    await assertSucceeds(setDoc(doc(db, "households", HID, "credit_profiles", "alex"), profile));
+    await assertFails(setDoc(doc(db, "households", HID, "credit_profiles", "stranger"), profile));
+    await assertSucceeds(
+      setDoc(doc(db, "households", HID, "credit_score_history", "h1"), { user_id: "alex", bureau: "other", score: 700, recorded_date: "2026-01-01" }),
+    );
+    await assertFails(
+      setDoc(doc(db, "households", HID, "credit_score_history", "h2"), { user_id: "stranger", bureau: "other", score: 700, recorded_date: "2026-01-01" }),
+    );
+  });
+
+  it("are off limits to other households", async () => {
+    await assertFails(getDocs(collection(as("mallory"), "households", HID, "credit_profiles")));
+    await assertFails(setDoc(doc(as("mallory"), "households", HID, "credit_profiles", "alex"), profile));
+  });
+
+  it("reject out-of-range values", async () => {
+    const put = (data: object) => setDoc(doc(as("alex"), "households", HID, "credit_profiles", "alex"), { ...profile, ...data });
+    await assertFails(put({ score: 299 }));
+    await assertFails(put({ score: 851 }));
+    await assertFails(put({ score: 700.5 }));
+    await assertFails(put({ utilization_pct: 101 }));
+    await assertFails(put({ num_open_accounts: -1 }));
+    await assertFails(put({ bureau: "made-up" }));
+  });
+});

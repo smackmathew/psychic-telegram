@@ -44,6 +44,25 @@ service cloud.firestore {
       return value is string && value.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$');
     }
 
+    function optionalNumberIn(data, key, min, max) {
+      return !(key in data) || data[key] == null || (data[key] is number && data[key] >= min && data[key] <= max);
+    }
+
+    function optionalCount(data, key) {
+      return !(key in data) || data[key] == null || (data[key] is int && data[key] >= 0);
+    }
+
+    function validCreditProfile(data) {
+      return data.score is int && data.score >= 300 && data.score <= 850
+        && data.bureau in ['experian', 'equifax', 'transunion', 'other']
+        && optionalNumberIn(data, 'utilization_pct', 0, 100)
+        && optionalNumberIn(data, 'on_time_payment_pct', 0, 100)
+        && optionalNumberIn(data, 'credit_age_years', 0, 200)
+        && optionalCount(data, 'num_hard_inquiries_12mo')
+        && optionalCount(data, 'num_open_accounts')
+        && optionalCount(data, 'num_derogatory_marks');
+    }
+
     match /users/{uid} {
       allow get: if signedIn() && request.auth.uid == uid;
       allow create: if signedIn() && request.auth.uid == uid
@@ -162,6 +181,24 @@ service cloud.firestore {
           && request.resource.data.due_day >= 1
           && request.resource.data.due_day <= 28
           && request.resource.data.is_active is bool;
+      }
+
+      // One credit snapshot per member, at credit_profiles/{their user ID}.
+      match /credit_profiles/{uid} {
+        allow read, delete: if isMember(hid);
+        allow create, update: if isMember(hid)
+          && exists(/databases/$(database)/documents/households/$(hid)/members/$(uid))
+          && validCreditProfile(request.resource.data);
+      }
+
+      match /credit_score_history/{id} {
+        allow read, delete: if isMember(hid);
+        allow create: if isMember(hid)
+          && exists(/databases/$(database)/documents/households/$(hid)/members/$(request.resource.data.user_id))
+          && request.resource.data.score is int
+          && request.resource.data.score >= 300
+          && request.resource.data.score <= 850
+          && isDate(request.resource.data.recorded_date);
       }
 
       match /notifications/{id} {

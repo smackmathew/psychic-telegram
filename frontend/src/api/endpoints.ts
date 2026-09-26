@@ -5,13 +5,9 @@ export { AuthApi, HouseholdApi } from "../firebase/household";
 export { AccountsApi, CategoriesApi, TransactionsApi } from "../firebase/ledger";
 export { BudgetsApi, GoalsApi, RecurringBillsApi } from "../firebase/planning";
 export { DashboardApi } from "../firebase/dashboard";
+export { CreditApi } from "../firebase/credit";
 import type {
   Account,
-  BorrowingCapacityOut,
-  BorrowingCapacityRequest,
-  CreditProfile,
-  CreditRecommendationsOut,
-  CreditScoreHistoryPoint,
   Notification,
 } from "../types";
 
@@ -29,15 +25,4 @@ export const PlaidApi = {
   exchangePublicToken: (public_token: string, institution_name?: string) =>
     apiClient.post<Account[]>("/plaid/exchange-public-token", { public_token, institution_name }).then((r) => r.data),
   sync: () => apiClient.post("/plaid/sync"),
-};
-
-export const CreditApi = {
-  listProfiles: () => apiClient.get<CreditProfile[]>("/credit/profiles").then((r) => r.data),
-  upsertProfile: (userId: string, payload: Partial<CreditProfile> & { recorded_date?: string }) =>
-    apiClient.put<CreditProfile>(`/credit/profiles/${userId}`, payload).then((r) => r.data),
-  history: (userId: string) => apiClient.get<CreditScoreHistoryPoint[]>(`/credit/profiles/${userId}/history`).then((r) => r.data),
-  recommendations: (userId: string) =>
-    apiClient.get<CreditRecommendationsOut>(`/credit/profiles/${userId}/recommendations`).then((r) => r.data),
-  borrowingCapacity: (payload: BorrowingCapacityRequest) =>
-    apiClient.post<BorrowingCapacityOut>("/credit/borrowing-capacity", payload).then((r) => r.data),
 };
