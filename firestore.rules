@@ -1,0 +1,213 @@
+rules_version = '2';
+
+// Data layout (money is stored as integer cents in *_cents fields):
+//   users/{uid}                          -> { household_id }  pointer to the user's household
+//   invites/{code}                       -> { household_id }  lets a partner find the household to join
+//   households/{hid}                     -> { name, member_ids, invite_code, annual_gross_income_cents, ... }
+//   households/{hid}/members/{uid}       -> { full_name, email }
+//   households/{hid}/{collection}/{id}   -> accounts, categories, transactions, ...
+//
+// Every household document is readable and writable only by that household's members.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function householdPath(hid) {
+      return /databases/$(database)/documents/households/$(hid);
+    }
+
+    function isMember(hid) {
+      return signedIn() && request.auth.uid in get(householdPath(hid)).data.member_ids;
+    }
+
+    // Membership as it will be once the current batch commits (used while creating or joining).
+    function isMemberAfter(hid) {
+      return signedIn() && request.auth.uid in getAfter(householdPath(hid)).data.member_ids;
+    }
+
+    function nonEmptyString(value) {
+      return value is string && value.size() > 0;
+    }
+
+    function optionalString(data, key) {
+      return !(key in data) || data[key] == null || data[key] is string;
+    }
+
+    function optionalInt(data, key) {
+      return !(key in data) || data[key] == null || data[key] is int;
+    }
+
+    function isDate(value) {
+      return value is string && value.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$');
+    }
+
+    function optionalNumberIn(data, key, min, max) {
+      return !(key in data) || data[key] == null || (data[key] is number && data[key] >= min && data[key] <= max);
+    }
+
+    function optionalCount(data, key) {
+      return !(key in data) || data[key] == null || (data[key] is int && data[key] >= 0);
+    }
+
+    function validCreditProfile(data) {
+      return data.score is int && data.score >= 300 && data.score <= 850
+        && data.bureau in ['experian', 'equifax', 'transunion', 'other']
+        && optionalNumberIn(data, 'utilization_pct', 0, 100)
+        && optionalNumberIn(data, 'on_time_payment_pct', 0, 100)
+        && optionalNumberIn(data, 'credit_age_years', 0, 200)
+        && optionalCount(data, 'num_hard_inquiries_12mo')
+        && optionalCount(data, 'num_open_accounts')
+        && optionalCount(data, 'num_derogatory_marks');
+    }
+
+    match /users/{uid} {
+      allow get: if signedIn() && request.auth.uid == uid;
+      allow create: if signedIn() && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['household_id'])
+        && isMemberAfter(request.resource.data.household_id);
+    }
+
+    match /invites/{code} {
+      // Readable one at a time by code (to join), never listable.
+      allow get: if signedIn();
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly(['household_id'])
+        && getAfter(householdPath(request.resource.data.household_id)).data.invite_code == code
+        && isMemberAfter(request.resource.data.household_id);
+    }
+
+    match /households/{hid} {
+      allow read: if signedIn() && request.auth.uid in resource.data.member_ids;
+
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly(['name', 'member_ids', 'invite_code', 'annual_gross_income_cents', 'created_at'])
+        && nonEmptyString(request.resource.data.name)
+        && request.resource.data.member_ids == [request.auth.uid]
+        && nonEmptyString(request.resource.data.invite_code)
+        && optionalInt(request.resource.data, 'annual_gross_income_cents');
+
+      allow update: if signedIn() && (editingAsMember() || joiningWithInviteCode());
+
+      function editingAsMember() {
+        return request.auth.uid in resource.data.member_ids
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'annual_gross_income_cents'])
+          && nonEmptyString(request.resource.data.name)
+          && optionalInt(request.resource.data, 'annual_gross_income_cents');
+      }
+
+      // A new member may add only themselves, and only by presenting the household's invite code.
+      function joiningWithInviteCode() {
+        return !(request.auth.uid in resource.data.member_ids)
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['member_ids', 'join_code'])
+          && request.resource.data.member_ids == resource.data.member_ids.concat([request.auth.uid])
+          && request.resource.data.join_code == resource.data.invite_code;
+      }
+
+      match /members/{uid} {
+        allow read: if isMember(hid);
+        allow create: if signedIn() && request.auth.uid == uid && isMemberAfter(hid)
+          && request.resource.data.keys().hasOnly(['full_name', 'email'])
+          && nonEmptyString(request.resource.data.full_name);
+        allow update: if signedIn() && request.auth.uid == uid && isMember(hid)
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['full_name'])
+          && nonEmptyString(request.resource.data.full_name);
+      }
+
+      match /categories/{id} {
+        allow read, delete: if isMember(hid);
+        // isMemberAfter: default categories are created in the same batch as the household.
+        allow create, update: if isMemberAfter(hid)
+          && nonEmptyString(request.resource.data.name)
+          && request.resource.data.type in ['income', 'expense'];
+      }
+
+      match /accounts/{id} {
+        allow read, delete: if isMember(hid);
+        allow create, update: if isMember(hid)
+          && nonEmptyString(request.resource.data.name)
+          && request.resource.data.type in ['checking', 'savings', 'credit_card', 'investment', 'loan', 'other']
+          && request.resource.data.current_balance_cents is int
+          && optionalInt(request.resource.data, 'available_balance_cents')
+          && optionalInt(request.resource.data, 'monthly_payment_cents');
+      }
+
+      match /transactions/{id} {
+        allow read, delete: if isMember(hid);
+        allow create, update: if isMember(hid)
+          && request.resource.data.amount_cents is int
+          && request.resource.data.amount_cents > 0
+          && request.resource.data.direction in ['debit', 'credit']
+          && nonEmptyString(request.resource.data.name)
+          && isDate(request.resource.data.date)
+          && exists(/databases/$(database)/documents/households/$(hid)/accounts/$(request.resource.data.account_id))
+          && optionalString(request.resource.data, 'category_id')
+          && optionalString(request.resource.data, 'notes');
+      }
+
+      match /budgets/{id} {
+        allow read, delete: if isMember(hid);
+        // The ID is "<month>_<category>", so there's at most one budget per category per month.
+        allow create, update: if isMember(hid)
+          && id == request.resource.data.month + '_' + request.resource.data.category_id
+          && isDate(request.resource.data.month)
+          && request.resource.data.month.matches('.*-01$')
+          && exists(/databases/$(database)/documents/households/$(hid)/categories/$(request.resource.data.category_id))
+          && request.resource.data.amount_limit_cents is int
+          && request.resource.data.amount_limit_cents > 0;
+      }
+
+      match /goals/{id} {
+        allow read, delete: if isMember(hid);
+        allow create, update: if isMember(hid)
+          && nonEmptyString(request.resource.data.name)
+          && request.resource.data.type in ['savings', 'debt_payoff', 'investment']
+          && request.resource.data.target_amount_cents is int
+          && request.resource.data.target_amount_cents > 0
+          && request.resource.data.current_amount_cents is int
+          && (request.resource.data.target_date == null || isDate(request.resource.data.target_date))
+          && request.resource.data.last_milestone_pct is int;
+      }
+
+      match /recurring_bills/{id} {
+        allow read, delete: if isMember(hid);
+        allow create, update: if isMember(hid)
+          && nonEmptyString(request.resource.data.name)
+          && request.resource.data.amount_cents is int
+          && request.resource.data.amount_cents > 0
+          && request.resource.data.due_day is int
+          && request.resource.data.due_day >= 1
+          && request.resource.data.due_day <= 28
+          && request.resource.data.is_active is bool;
+      }
+
+      // One credit snapshot per member, at credit_profiles/{their user ID}.
+      match /credit_profiles/{uid} {
+        allow read, delete: if isMember(hid);
+        allow create, update: if isMember(hid)
+          && exists(/databases/$(database)/documents/households/$(hid)/members/$(uid))
+          && validCreditProfile(request.resource.data);
+      }
+
+      match /credit_score_history/{id} {
+        allow read, delete: if isMember(hid);
+        allow create: if isMember(hid)
+          && exists(/databases/$(database)/documents/households/$(hid)/members/$(request.resource.data.user_id))
+          && request.resource.data.score is int
+          && request.resource.data.score >= 300
+          && request.resource.data.score <= 850
+          && isDate(request.resource.data.recorded_date);
+      }
+
+      match /notifications/{id} {
+        allow read, delete: if isMember(hid);
+        // Members can mark notifications read; creating them comes with the notification checks.
+        allow update: if isMember(hid)
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['is_read'])
+          && request.resource.data.is_read is bool;
+      }
+    }
+  }
+}

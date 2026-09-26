@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Area, AreaChart, CartesianGrid, Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { DashboardApi, NotificationsApi } from "../api/endpoints";
+import InvitePartner from "../components/InvitePartner";
 import StatCard from "../components/StatCard";
 import { formatCurrency, formatDate } from "../utils/format";
 
@@ -19,6 +20,7 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6">
+      <InvitePartner />
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
         <StatCard label="Net worth" value={formatCurrency(summary.net_worth)} tone={summary.net_worth >= 0 ? "positive" : "negative"} />
         <StatCard label="Total assets" value={formatCurrency(summary.total_assets)} />

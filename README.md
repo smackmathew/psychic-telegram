@@ -6,8 +6,19 @@ capacity module.
 
 ## Stack
 
-- **Backend**: FastAPI + SQLAlchemy + Postgres, JWT auth, APScheduler for background sync/checks, Plaid SDK.
-- **Frontend**: React + TypeScript (Vite), Tailwind CSS, TanStack Query, Recharts, react-plaid-link.
+It's a Firebase app:
+
+- **Frontend** (`frontend/`): React + TypeScript (Vite), Tailwind CSS, TanStack Query, Recharts,
+  react-plaid-link. Served by **Firebase Hosting**.
+- **Data**: **Cloud Firestore**, read and written directly by the browser. `firestore.rules` limits
+  each household's data to its members and validates what's written. The browser keeps an offline
+  copy, so the app loads without a connection and syncs changes when it's back.
+- **Sign-in**: **Firebase Authentication** (email and password).
+- **Cloud Functions** (`functions/`, TypeScript): Plaid (linking banks and syncing them) and the
+  notification checks, which run hourly and on "Check now". Plaid's secret and each bank's access
+  token stay on the server; the browser never sees them.
+
+Money is stored as whole cents (`*_cents` fields) so balances never drift from rounding.
 
 ## Features
 
@@ -17,8 +28,8 @@ capacity module.
 - **Goals**: savings / debt payoff / investment goals with milestone tracking (25/50/75/100%).
 - **Recurring bills**: due-date tracking that raises a notification before a bill is due if no matching payment has posted.
 - **Notifications** (in-app): budget overages, goal milestones, upcoming bills, large transactions,
-  idle-cash investment nudges, bank-sync errors, and credit alerts. A background job runs the rule
-  engine automatically (see `SCHEDULER_INTERVAL_MINUTES`); "Check now" also triggers it on demand.
+  idle-cash investment nudges, bank-sync errors, and credit alerts. The checks run every hour in
+  Cloud Functions; "Check now" also runs them on demand.
 - **Credit & Loans**: manual/periodic credit-factor entry (score, utilization, on-time %, credit age,
   inquiries, derogatory marks) per household member, a score history chart, rule-based recommendations
   to improve the score, and a borrowing-capacity calculator that estimates mortgage, SBA-style business
@@ -30,93 +41,66 @@ capacity module.
   later. The borrowing-capacity numbers are rule-of-thumb estimates (28/36 DTI guideline, standard
   amortization, typical down-payment norms), not a pre-approval.
 
-## Running it locally
+## Putting it online
 
-### Option A: Docker Compose (recommended)
+You need a Firebase project on the **Blaze** plan (Cloud Functions require it; for two people the
+usage should stay within the free allowance), plus Node.js 22 on your computer.
+
+1. **Set up the project** in the [Firebase console](https://console.firebase.google.com): create one or
+   pick an existing one, then:
+   - **Authentication** → Get started → **Email/Password** → enable.
+   - **Firestore Database** → Create database (production mode; the rules come from this repo).
+   - **Project settings** → General → Your apps → add a **Web app**, and copy its config values.
+2. **Configure the web app**: copy `frontend/.env.example` to `frontend/.env.local` and fill in the
+   values from step 1.
+3. **Configure the functions**: copy `functions/.env.example` to `functions/.env` and set your
+   `PLAID_CLIENT_ID`, `PLAID_ENV` (`sandbox` to try it with Plaid's test banks, `production` for real
+   ones) and `TIME_ZONE`.
+4. **Deploy**, from the repository root:
+   ```bash
+   (cd frontend && npm ci && npm run build)
+   (cd functions && npm ci)
+   npx --prefix frontend firebase login
+   npx --prefix frontend firebase use --add          # pick your project
+   npx --prefix frontend firebase functions:secrets:set PLAID_SECRET   # paste your Plaid secret
+   npx --prefix frontend firebase deploy
+   ```
+   `firebase deploy` builds the web app and the functions first. It prints your app's address
+   (`https://<project-id>.web.app`). After pulling changes, run `npm ci` in both folders again and
+   redeploy.
+5. **Create your household**: open the app, choose "Sign up", and create the household. The dashboard
+   shows an **invite code**; your partner signs up with it to join the same household.
+6. **Turn off sign-ups** once you've both joined, so nobody else can create an account:
+   Authentication → Settings → User actions → uncheck "Enable create (sign-up)".
+7. **Link your banks** on the Accounts page ("Link a bank account").
+
+The notification checks and bank sync run every hour on their own; the Accounts and Notifications
+pages also have buttons to run them now.
+
+## Developing locally
+
+Everything runs against the Firebase emulators on your computer, so you don't touch your real data.
+The emulators need Java 11 or newer.
 
 ```bash
-cp backend/.env.example backend/.env   # fill in a real SECRET_KEY, optionally Plaid keys
-docker compose up --build
+(cd functions && npm ci)
+cd frontend && npm ci
+npm run emulators         # terminal 1: Auth, Firestore and Functions emulators (UI at http://localhost:4000)
+npm run dev:emulators     # terminal 2: the app at http://localhost:5173
 ```
 
-Then create your two household accounts:
-
-```bash
-docker compose exec backend python -m app.seed \
-  --household-name "Our Household" \
-  --user1-name "Your Name" --user1-email you@example.com --user1-password "..." \
-  --user2-name "Partner's Name" --user2-email partner@example.com --user2-password "..."
-```
-
-- Backend: http://localhost:8000 (docs at `/docs`)
-- Frontend: http://localhost:5173
-
-### Option B: Run manually
-
-Backend:
-```bash
-cd backend
-python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-cp .env.example .env   # edit DATABASE_URL to point at your own Postgres
-alembic upgrade head    # create/update the schema
-uvicorn app.main:app --reload
-python -m app.seed --household-name "..." --user1-name "..." --user1-email "..." --user1-password "..." --user2-name "..." --user2-email "..." --user2-password "..."
-```
-
-Frontend:
-```bash
-cd frontend
-npm install
-npm run dev
-```
-
-## Enabling bank/investment sync (Plaid)
-
-1. Create a free Plaid developer account and get a Client ID + **sandbox** secret.
-2. Set `PLAID_CLIENT_ID`, `PLAID_SECRET`, `PLAID_ENV=sandbox` in `backend/.env`.
-3. Restart the backend. The "Link a bank account" button on the Accounts page will now work
-   (Plaid's sandbox lets you use test credentials like `user_good` / `pass_good`).
-4. When ready for real accounts, apply for Production access in the Plaid dashboard and switch
-   `PLAID_ENV=production` with your production secret.
-
-Without Plaid keys, the app still works fully with manually-entered accounts and transactions.
-
-## Database migrations (Alembic)
-
-Schema is managed by Alembic (`backend/alembic/`). The Docker image runs `alembic upgrade head`
-automatically on every container start (see `backend/entrypoint.sh`); running the backend
-manually, do it yourself first (see Option B above).
-
-After changing a model in `app/models.py`, generate and apply a migration:
-```bash
-cd backend
-alembic revision --autogenerate -m "describe the change"
-# review the generated file under alembic/versions/ before applying
-alembic upgrade head
-```
-
-Useful commands: `alembic current` (what's applied), `alembic history` (full list),
-`alembic downgrade -1` (undo the last migration).
+To try Plaid locally, put `PLAID_CLIENT_ID` in `functions/.env` and `PLAID_SECRET=...` in
+`functions/.secret.local` (git-ignored).
 
 ## Running the tests
 
-The backend has a pytest suite under `backend/tests/` covering the service logic (borrowing
-capacity, credit recommendations, notification rules), every API route, household data
-isolation, and a check that `app/models.py` matches the Alembic migrations. It runs against a
-real Postgres database built from the migrations; each test is rolled back afterwards.
-
-With the Docker Compose database running (`docker compose up -d db`):
 ```bash
-cd backend
-pip install -r requirements-dev.txt
-pytest
+cd frontend && npm test    # data layer, security rules and "Check now", against the emulators
+cd functions && npm test   # notification rules and Plaid sync (with a stand-in for Plaid)
 ```
 
-By default the suite uses a `household_dashboard_test` database on the Compose Postgres
-(created automatically, and **wiped on every run**). Point it elsewhere with
-`TEST_DATABASE_URL=postgresql://user:pass@host:5432/some_test_db`. CI runs the same suite on
-every push that touches `backend/` (`.github/workflows/backend-tests.yml`).
+Both start the emulators themselves. GitHub Actions runs both suites on every push
+(`.github/workflows/tests.yml`).
 
 ## Notable simplifications (MVP)
 
