@@ -127,6 +127,50 @@ service cloud.firestore {
           && optionalString(request.resource.data, 'category_id')
           && optionalString(request.resource.data, 'notes');
       }
+
+      match /budgets/{id} {
+        allow read, delete: if isMember(hid);
+        // The ID is "<month>_<category>", so there's at most one budget per category per month.
+        allow create, update: if isMember(hid)
+          && id == request.resource.data.month + '_' + request.resource.data.category_id
+          && isDate(request.resource.data.month)
+          && request.resource.data.month.matches('.*-01$')
+          && exists(/databases/$(database)/documents/households/$(hid)/categories/$(request.resource.data.category_id))
+          && request.resource.data.amount_limit_cents is int
+          && request.resource.data.amount_limit_cents > 0;
+      }
+
+      match /goals/{id} {
+        allow read, delete: if isMember(hid);
+        allow create, update: if isMember(hid)
+          && nonEmptyString(request.resource.data.name)
+          && request.resource.data.type in ['savings', 'debt_payoff', 'investment']
+          && request.resource.data.target_amount_cents is int
+          && request.resource.data.target_amount_cents > 0
+          && request.resource.data.current_amount_cents is int
+          && (request.resource.data.target_date == null || isDate(request.resource.data.target_date))
+          && request.resource.data.last_milestone_pct is int;
+      }
+
+      match /recurring_bills/{id} {
+        allow read, delete: if isMember(hid);
+        allow create, update: if isMember(hid)
+          && nonEmptyString(request.resource.data.name)
+          && request.resource.data.amount_cents is int
+          && request.resource.data.amount_cents > 0
+          && request.resource.data.due_day is int
+          && request.resource.data.due_day >= 1
+          && request.resource.data.due_day <= 28
+          && request.resource.data.is_active is bool;
+      }
+
+      match /notifications/{id} {
+        allow read, delete: if isMember(hid);
+        // Members can mark notifications read; creating them comes with the notification checks.
+        allow update: if isMember(hid)
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['is_read'])
+          && request.resource.data.is_read is bool;
+      }
     }
   }
 }

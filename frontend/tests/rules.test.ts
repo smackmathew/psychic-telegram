@@ -30,6 +30,8 @@ beforeEach(async () => {
     await setDoc(doc(db, "users", "alex"), { household_id: HID });
     await setDoc(doc(db, "households", HID, "members", "alex"), { full_name: "Alex", email: "alex@example.com" });
     await setDoc(doc(db, "households", HID, "accounts", "acct"), { name: "Checking", type: "checking", current_balance_cents: 100000 });
+    await setDoc(doc(db, "households", HID, "categories", "groceries"), { name: "Groceries", type: "expense" });
+    await setDoc(doc(db, "households", HID, "notifications", "n1"), { title: "Hi", message: "Hello", is_read: false });
   });
 });
 
@@ -141,5 +143,45 @@ describe("user profiles", () => {
       await setDoc(doc(ctx.firestore(), "households", "h2"), { name: "Other", member_ids: ["alex", "sam"], invite_code: "OTHER234" });
     });
     await assertFails(setDoc(doc(as("alex"), "users", "alex"), { household_id: "h2" }));
+  });
+});
+
+describe("budgets, goals, bills and notifications", () => {
+  const budget = { category_id: "groceries", month: "2026-03-01", amount_limit_cents: 40000 };
+  const goal = { name: "Fund", type: "savings", target_amount_cents: 100000, current_amount_cents: 0, target_date: null, last_milestone_pct: 0 };
+  const bill = { name: "Rent", amount_cents: 200000, due_day: 1, is_active: true };
+
+  it("are writable by members and off limits to others", async () => {
+    for (const [uid, check] of [["alex", assertSucceeds], ["mallory", assertFails]] as const) {
+      const db = as(uid);
+      await check(setDoc(doc(db, "households", HID, "budgets", "2026-03-01_groceries"), budget));
+      await check(setDoc(doc(db, "households", HID, "goals", "g1"), goal));
+      await check(setDoc(doc(db, "households", HID, "recurring_bills", "b1"), bill));
+      await check(getDocs(collection(db, "households", HID, "notifications")));
+    }
+  });
+
+  it("allow only one budget per category and month", async () => {
+    // The document ID has to be "<month>_<category>".
+    await assertFails(setDoc(doc(as("alex"), "households", HID, "budgets", "random-id"), budget));
+  });
+
+  it("reject invalid values", async () => {
+    const db = as("alex");
+    const put = (coll: string, id: string, data: object) => setDoc(doc(db, "households", HID, coll, id), data);
+    await assertFails(put("budgets", "2026-03-01_groceries", { ...budget, amount_limit_cents: 0 }));
+    await assertFails(put("budgets", "2026-03-15_groceries", { ...budget, month: "2026-03-15" }));
+    await assertFails(put("budgets", "2026-03-01_nope", { ...budget, category_id: "nope" }));
+    await assertFails(put("goals", "g1", { ...goal, target_amount_cents: 0 }));
+    await assertFails(put("goals", "g1", { ...goal, type: "lottery" }));
+    await assertFails(put("recurring_bills", "b1", { ...bill, due_day: 29 }));
+    await assertFails(put("recurring_bills", "b1", { ...bill, due_day: 0 }));
+    await assertFails(put("recurring_bills", "b1", { ...bill, amount_cents: -1 }));
+  });
+
+  it("let members mark notifications read but not rewrite them", async () => {
+    const ref = doc(as("alex"), "households", HID, "notifications", "n1");
+    await assertSucceeds(updateDoc(ref, { is_read: true }));
+    await assertFails(updateDoc(ref, { title: "Edited" }));
   });
 });

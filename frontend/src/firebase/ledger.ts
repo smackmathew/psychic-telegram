@@ -160,15 +160,19 @@ export interface TransactionFilters {
   offset?: number;
 }
 
+/** Every transaction in the household, in no particular order. */
+export async function allTransactions(): Promise<Transaction[]> {
+  const snap = await getDocs(householdCollection("transactions"));
+  return snap.docs.map(toTransaction);
+}
+
 export const TransactionsApi = {
   /** Newest first. Filtering happens here rather than in the query, so no composite indexes are needed. */
   list: async (params: TransactionFilters = {}): Promise<Transaction[]> => {
-    const snap = await getDocs(householdCollection("transactions"));
     const search = params.search?.toLowerCase();
     const limit = params.limit ?? 200;
     const offset = params.offset ?? 0;
-    return snap.docs
-      .map(toTransaction)
+    return (await allTransactions())
       .filter(
         (t) =>
           (!params.account_id || t.account_id === params.account_id) &&

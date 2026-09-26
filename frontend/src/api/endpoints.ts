@@ -3,39 +3,17 @@ import { apiClient } from "./client";
 // Migrated to Firebase. The rest below still call the old Python API until their stage is moved.
 export { AuthApi, HouseholdApi } from "../firebase/household";
 export { AccountsApi, CategoriesApi, TransactionsApi } from "../firebase/ledger";
+export { BudgetsApi, GoalsApi, RecurringBillsApi } from "../firebase/planning";
+export { DashboardApi } from "../firebase/dashboard";
 import type {
   Account,
   BorrowingCapacityOut,
   BorrowingCapacityRequest,
-  BudgetProgress,
   CreditProfile,
   CreditRecommendationsOut,
   CreditScoreHistoryPoint,
-  DashboardSummary,
-  Goal,
   Notification,
-  RecurringBill,
 } from "../types";
-
-export const BudgetsApi = {
-  list: (month?: string) => apiClient.get<BudgetProgress[]>("/budgets", { params: { month } }).then((r) => r.data),
-  create: (payload: { category_id: string; month: string; amount_limit: number }) =>
-    apiClient.post("/budgets", payload).then((r) => r.data),
-  remove: (id: string) => apiClient.delete(`/budgets/${id}`),
-};
-
-export const GoalsApi = {
-  list: () => apiClient.get<Goal[]>("/goals").then((r) => r.data),
-  create: (payload: Partial<Goal>) => apiClient.post<Goal>("/goals", payload).then((r) => r.data),
-  update: (id: string, payload: Partial<Goal>) => apiClient.patch<Goal>(`/goals/${id}`, payload).then((r) => r.data),
-  remove: (id: string) => apiClient.delete(`/goals/${id}`),
-};
-
-export const RecurringBillsApi = {
-  list: () => apiClient.get<RecurringBill[]>("/recurring-bills").then((r) => r.data),
-  create: (payload: Partial<RecurringBill>) => apiClient.post<RecurringBill>("/recurring-bills", payload).then((r) => r.data),
-  remove: (id: string) => apiClient.delete(`/recurring-bills/${id}`),
-};
 
 export const NotificationsApi = {
   list: (unreadOnly = false) =>
@@ -51,10 +29,6 @@ export const PlaidApi = {
   exchangePublicToken: (public_token: string, institution_name?: string) =>
     apiClient.post<Account[]>("/plaid/exchange-public-token", { public_token, institution_name }).then((r) => r.data),
   sync: () => apiClient.post("/plaid/sync"),
-};
-
-export const DashboardApi = {
-  summary: () => apiClient.get<DashboardSummary>("/dashboard/summary").then((r) => r.data),
 };
 
 export const CreditApi = {
