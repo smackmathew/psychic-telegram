@@ -4,6 +4,10 @@ A private, two-person financial dashboard: accounts, transactions, budgets, savi
 goals, in-app notifications, bank/investment sync via Plaid, and a credit monitoring + borrowing
 capacity module.
 
+> This repo also holds a separate app, the **Tauri Operations Dashboard** (clients, employees,
+> tasks, help desk and a live time clock). It lives in [`tauri-dashboard/`](tauri-dashboard/README.md)
+> and has its own Firebase project, setup and tests.
+
 ## Stack
 
 It's a Firebase app:
