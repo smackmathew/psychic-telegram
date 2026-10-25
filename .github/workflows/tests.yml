@@ -10,7 +10,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        package: [frontend, functions]
+        package: [frontend, functions, tauri-dashboard]
     defaults:
       run:
         working-directory: ${{ matrix.package }}
@@ -23,6 +23,7 @@ jobs:
           cache-dependency-path: |
             frontend/package-lock.json
             functions/package-lock.json
+            tauri-dashboard/package-lock.json
       # The Firebase emulators need Java.
       - uses: actions/setup-java@v4
         with:

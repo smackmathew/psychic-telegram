@@ -18,3 +18,6 @@ dist/
 # Firebase
 .firebase/
 .env.*.local
+
+# Emulator logs
+*-debug.log
