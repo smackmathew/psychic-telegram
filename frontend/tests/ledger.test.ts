@@ -67,6 +67,26 @@ describe("transactions and account balances", () => {
     expect(await balance(account.id)).toBe(1000);
   });
 
+  it("moves the balance by exactly the stored cents when an amount isn't a whole number of cents", async () => {
+    // $0.125 is stored as 13 cents. Rounding the balance change separately (-12.5 rounds to -12)
+    // used to leave the account a cent off after an edit and a delete.
+    const account = await createAccount({ current_balance: 0 });
+    const txn = await createTransaction(account.id, { amount: 0.125, direction: "debit" });
+    expect((await TransactionsApi.list())[0].amount).toBe(0.13);
+    expect(await balance(account.id)).toBe(-0.13);
+
+    await TransactionsApi.update(txn.id, { amount: 1 });
+    expect(await balance(account.id)).toBe(-1);
+
+    await TransactionsApi.remove(txn.id);
+    expect(await balance(account.id)).toBe(0);
+  });
+
+  it("rejects an amount that rounds to zero cents", async () => {
+    const account = await createAccount({ current_balance: 0 });
+    await expect(createTransaction(account.id, { amount: 0.004 })).rejects.toThrow("Amount must be greater than 0");
+  });
+
   it("keeps cents exact across many small transactions", async () => {
     const account = await createAccount({ current_balance: 0 });
     for (let i = 0; i < 10; i++) {
