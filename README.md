@@ -30,7 +30,8 @@ Money is stored as whole cents (`*_cents` fields) so balances never drift from r
 - **Transactions**: manual entry or auto-imported from Plaid, with categorization.
 - **Budgets**: per-category monthly limits with spend-so-far progress.
 - **Goals**: savings / debt payoff / investment goals with milestone tracking (25/50/75/100%).
-- **Recurring bills**: due-date tracking that raises a notification before a bill is due if no matching payment has posted.
+- **Recurring bills**: a Bills page to add, edit and pause bills, showing when each is next due and the
+  monthly total. A notification goes out a few days before a bill is due if no matching payment has posted.
 - **Notifications** (in-app): budget overages, goal milestones, upcoming bills, large transactions,
   idle-cash investment nudges, bank-sync errors, and credit alerts. The checks run every hour in
   Cloud Functions; "Check now" also runs them on demand.
