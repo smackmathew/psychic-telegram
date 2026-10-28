@@ -6,8 +6,14 @@ export function formatPercent(value: number): string {
   return `${value.toFixed(0)}%`;
 }
 
+/**
+ * "Mar 10, 2026". Takes a "YYYY-MM-DD" date or a full timestamp. Date-only strings are read as
+ * local dates: `new Date("2026-03-10")` would be UTC midnight, which is Mar 9 in US time zones.
+ */
 export function formatDate(value: string): string {
-  return new Date(value).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  const dateOnly = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  const date = dateOnly ? new Date(Number(dateOnly[1]), Number(dateOnly[2]) - 1, Number(dateOnly[3])) : new Date(value);
+  return date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
 
 /** Currency with cents, for amounts like bills where the exact figure matters. */

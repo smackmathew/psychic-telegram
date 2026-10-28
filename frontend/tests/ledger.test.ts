@@ -1,5 +1,7 @@
+import { doc, setDoc } from "firebase/firestore";
 import { beforeEach, describe, expect, it } from "vitest";
 import { AccountsApi, CategoriesApi, TransactionsApi } from "../src/firebase/ledger";
+import { householdCollection } from "../src/firebase/session";
 import type { AccountType, TransactionDirection } from "../src/types";
 import { TODAY, balance, categoryId, createAccount, createTransaction, daysAgo, signUpNewHousehold } from "./helpers";
 
@@ -133,6 +135,42 @@ describe("transactions and account balances", () => {
     expect(updated.name).toBe("Coffee");
 
     expect((await TransactionsApi.update(txn.id, { category_id: null })).category_id).toBeNull();
+  });
+});
+
+describe("bank-imported transactions", () => {
+  // Plaid sync writes these server-side; write one directly the same way.
+  async function importedTransaction(accountId: string) {
+    const ref = doc(householdCollection("transactions"));
+    await setDoc(ref, {
+      account_id: accountId,
+      date: TODAY,
+      amount_cents: 4_200,
+      direction: "debit",
+      name: "COFFEE SHOP #12",
+      pending: false,
+      is_manual: false,
+    });
+    return ref.id;
+  }
+
+  it("can be recategorized and annotated", async () => {
+    const account = await createAccount({ current_balance: 1000 });
+    const id = await importedTransaction(account.id);
+    const dining = await categoryId("Dining Out");
+
+    const updated = await TransactionsApi.update(id, { category_id: dining, notes: "Team coffee" });
+    expect([updated.category_id, updated.notes, updated.amount]).toEqual([dining, "Team coffee", 42]);
+  });
+
+  it.each([{ amount: 50 }, { date: "2026-01-01" }, { name: "Coffee" }])("rejects editing %j", async (change) => {
+    const account = await createAccount({ current_balance: 1000 });
+    const id = await importedTransaction(account.id);
+
+    await expect(TransactionsApi.update(id, change)).rejects.toThrow("come from your bank");
+    const [unchanged] = await TransactionsApi.list();
+    expect([unchanged.amount, unchanged.date, unchanged.name]).toEqual([42, TODAY, "COFFEE SHOP #12"]);
+    expect(await balance(account.id)).toBe(1000);
   });
 });
 
