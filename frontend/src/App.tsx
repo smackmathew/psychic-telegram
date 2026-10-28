@@ -5,6 +5,7 @@ import PageLoader from "./components/PageLoader";
 import { useAuth } from "./context/AuthContext";
 
 const Accounts = lazy(() => import("./pages/Accounts"));
+const Bills = lazy(() => import("./pages/Bills"));
 const Budgets = lazy(() => import("./pages/Budgets"));
 const Credit = lazy(() => import("./pages/Credit"));
 const Dashboard = lazy(() => import("./pages/Dashboard"));
@@ -48,6 +49,7 @@ export default function App() {
         <Route path="transactions" element={<Transactions />} />
         <Route path="budgets" element={<Budgets />} />
         <Route path="goals" element={<Goals />} />
+        <Route path="bills" element={<Bills />} />
         <Route path="credit" element={<Credit />} />
         <Route path="notifications" element={<NotificationsPage />} />
       </Route>
