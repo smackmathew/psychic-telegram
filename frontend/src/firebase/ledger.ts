@@ -219,7 +219,12 @@ export const TransactionsApi = {
     return toTransaction(await getDoc(ref));
   },
 
-  /** Edits a transaction. Changing the amount moves the account balance by the difference. */
+  /**
+   * Edits a transaction. Changing the amount moves the account balance by the difference.
+   *
+   * Transactions imported from a bank can only be recategorized or annotated: the next sync
+   * overwrites their amount, date and description, and resets the account's balance from the bank.
+   */
   update: async (
     id: string,
     payload: Partial<Pick<Transaction, "category_id" | "notes" | "name" | "amount" | "date">>,
@@ -227,6 +232,10 @@ export const TransactionsApi = {
     const snap = await getDoc(doc(householdCollection("transactions"), id));
     if (!snap.exists()) throw new Error("Transaction not found");
     const current = snapshotData(snap);
+    const bankFieldsChanged = payload.amount !== undefined || payload.date !== undefined || payload.name !== undefined;
+    if (current.is_manual === false && bankFieldsChanged) {
+      throw new Error("The amount, date and description of an imported transaction come from your bank");
+    }
 
     const changes: Record<string, unknown> = {};
     if (payload.category_id !== undefined) changes.category_id = payload.category_id;

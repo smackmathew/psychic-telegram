@@ -134,7 +134,7 @@ function DueLabel({ bill, today }: { bill: RecurringBill; today: string }) {
   const when = days === 0 ? "today" : days === 1 ? "tomorrow" : `in ${days} days`;
   return (
     <span className={days <= 3 ? "font-medium text-amber-700" : "text-slate-600"}>
-      {formatDate(`${due}T00:00:00`)} <span className="text-slate-400">({when})</span>
+      {formatDate(due)} <span className="text-slate-400">({when})</span>
     </span>
   );
 }

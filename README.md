@@ -27,7 +27,9 @@ Money is stored as whole cents (`*_cents` fields) so balances never drift from r
 ## Features
 
 - **Accounts**: manual accounts or bank/investment accounts linked live via Plaid.
-- **Transactions**: manual entry or auto-imported from Plaid, with categorization.
+- **Transactions**: manual entry or auto-imported from Plaid, with categorization and notes. Manual
+  transactions can be edited (amount, date, description) and the account balance follows; bank-imported
+  ones keep the bank's figures, so only their category and notes can be changed.
 - **Budgets**: per-category monthly limits with spend-so-far progress.
 - **Goals**: savings / debt payoff / investment goals with milestone tracking (25/50/75/100%).
 - **Recurring bills**: a Bills page to add, edit and pause bills, showing when each is next due and the

@@ -1,6 +1,9 @@
+// Run in a US time zone: the date bugs these guard against don't show up in UTC, where CI runs.
+process.env.TZ = "America/New_York";
+
 import { describe, expect, it } from "vitest";
 import { daysBetween, nextDueDate } from "../src/firebase/dates";
-import { ordinal } from "../src/utils/format";
+import { formatDate, ordinal } from "../src/utils/format";
 
 describe("nextDueDate", () => {
   it.each([
@@ -32,5 +35,16 @@ describe("ordinal", () => {
     [21, "21st"], [22, "22nd"], [23, "23rd"], [28, "28th"],
   ])("%d -> %s", (n, expected) => {
     expect(ordinal(n)).toBe(expected);
+  });
+});
+
+describe("formatDate", () => {
+  it("reads a date-only string as a local date, not UTC midnight", () => {
+    expect(formatDate("2026-03-10")).toBe("Mar 10, 2026");
+    expect(formatDate("2026-01-01")).toBe("Jan 1, 2026");
+  });
+
+  it("still formats full timestamps", () => {
+    expect(formatDate(new Date(2026, 2, 10, 15, 30).toISOString())).toBe("Mar 10, 2026");
   });
 });
