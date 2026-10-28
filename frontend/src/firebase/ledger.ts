@@ -145,9 +145,14 @@ function toTransaction(snap: DocumentSnapshot): Transaction {
   };
 }
 
-function requirePositive(amount: number | null | undefined): number {
-  if (amount == null || !(amount > 0)) throw new Error("Amount must be greater than 0");
-  return amount;
+/**
+ * Rounds a dollar amount to the cents that get stored. Balance changes are computed from this
+ * same integer, never from the dollar figure, so a balance can't drift from its transactions.
+ */
+function requirePositiveCents(amount: number | null | undefined): number {
+  const cents = amount == null ? NaN : toCents(amount);
+  if (!(cents > 0)) throw new Error("Amount must be greater than 0");
+  return cents;
 }
 
 export interface TransactionFilters {
@@ -187,7 +192,7 @@ export const TransactionsApi = {
 
   /** Adds a transaction and applies its effect to the account balance, atomically. */
   create: async (payload: Partial<Transaction>): Promise<Transaction> => {
-    const amount = requirePositive(payload.amount);
+    const amountCents = requirePositiveCents(payload.amount);
     const account = await getAccountSnap(payload.account_id ?? "");
     const direction = payload.direction as TransactionDirection;
     const ref = doc(householdCollection("transactions"));
@@ -197,7 +202,7 @@ export const TransactionsApi = {
       account_id: account.id,
       category_id: payload.category_id ?? null,
       date: payload.date,
-      amount_cents: toCents(amount),
+      amount_cents: amountCents,
       direction,
       name: payload.name,
       merchant_name: payload.merchant_name ?? null,
@@ -207,7 +212,7 @@ export const TransactionsApi = {
       created_at: serverTimestamp(),
     });
     batch.update(account.ref, {
-      current_balance_cents: increment(toCents(transactionDelta(snapshotData(account).type, amount, direction))),
+      current_balance_cents: increment(transactionDelta(snapshotData(account).type, amountCents, direction)),
       updated_at: serverTimestamp(),
     });
     await commit(batch);
@@ -221,7 +226,7 @@ export const TransactionsApi = {
   ): Promise<Transaction> => {
     const snap = await getDoc(doc(householdCollection("transactions"), id));
     if (!snap.exists()) throw new Error("Transaction not found");
-    const current = toTransaction(snap);
+    const current = snapshotData(snap);
 
     const changes: Record<string, unknown> = {};
     if (payload.category_id !== undefined) changes.category_id = payload.category_id;
@@ -231,13 +236,14 @@ export const TransactionsApi = {
 
     const batch = writeBatch(db);
     if (payload.amount !== undefined) {
-      const amount = requirePositive(payload.amount);
-      changes.amount_cents = toCents(amount);
-      if (amount !== current.amount) {
+      const amountCents = requirePositiveCents(payload.amount);
+      changes.amount_cents = amountCents;
+      if (amountCents !== current.amount_cents) {
         const account = await getAccountSnap(current.account_id);
         const type = snapshotData(account).type;
-        const change = transactionDelta(type, amount, current.direction) - transactionDelta(type, current.amount, current.direction);
-        batch.update(account.ref, { current_balance_cents: increment(toCents(change)), updated_at: serverTimestamp() });
+        const change =
+          transactionDelta(type, amountCents, current.direction) - transactionDelta(type, current.amount_cents, current.direction);
+        batch.update(account.ref, { current_balance_cents: increment(change), updated_at: serverTimestamp() });
       }
     }
     batch.update(snap.ref, changes);
@@ -249,13 +255,13 @@ export const TransactionsApi = {
   remove: async (id: string): Promise<void> => {
     const snap = await getDoc(doc(householdCollection("transactions"), id));
     if (!snap.exists()) throw new Error("Transaction not found");
-    const txn = toTransaction(snap);
+    const txn = snapshotData(snap);
     const account = await getAccountSnap(txn.account_id);
 
     const batch = writeBatch(db);
     batch.delete(snap.ref);
     batch.update(account.ref, {
-      current_balance_cents: increment(-toCents(transactionDelta(snapshotData(account).type, txn.amount, txn.direction))),
+      current_balance_cents: increment(-transactionDelta(snapshotData(account).type, txn.amount_cents, txn.direction)),
       updated_at: serverTimestamp(),
     });
     await commit(batch);
